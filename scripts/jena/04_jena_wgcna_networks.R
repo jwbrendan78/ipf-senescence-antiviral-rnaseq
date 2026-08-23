@@ -1,0 +1,469 @@
+library(WGCNA)
+library(igraph)
+library(dplyr)
+library(tidyr)
+library(ggraph)
+library(ggplot2)
+library(arrow)
+library(svglite)
+
+base_dir <- "C:/Users/jwbre/Documents/Campisi/Jena_collab_exps_all fastqs/WGCNA/"
+setwd(base_dir)
+
+# ---------------------------
+# Batch-corrected WGCNA run configuration
+# ---------------------------
+# The batch-corrected notebook writes some files to the WGCNA base folder
+# rather than inside the named WGCNA output folder. This block is intentionally
+# flexible: it uses the batch-corrected run folder for module CSVs if present,
+# but uses the base-folder TOM.feather/gene_attributes.csv when that is where
+# the notebook wrote them.
+
+wgcna_run_name <- "Jena_count_DEseq2_batchCorrected_nonzero_50mod_0.4thresh_robustZ_diffNames"
+wgcna_run_dir  <- file.path(base_dir, wgcna_run_name)
+
+# TOM + gene attributes: prefer files in the WGCNA base folder because that is
+# where the notebook currently writes them. Fall back to the run folder if needed.
+tom_candidates <- c(
+  file.path(base_dir, "TOM.feather"),
+  file.path(wgcna_run_dir, "TOM.feather")
+)
+
+gene_attributes_candidates <- c(
+  file.path(base_dir, "gene_attributes.csv"),
+  file.path(wgcna_run_dir, "gene_attributes.csv")
+)
+
+tom_path <- tom_candidates[file.exists(tom_candidates)][1]
+gene_attributes_path <- gene_attributes_candidates[file.exists(gene_attributes_candidates)][1]
+
+if (is.na(tom_path) || !file.exists(tom_path)) {
+  stop("TOM.feather not found. Checked:\n", paste(tom_candidates, collapse = "\n"))
+}
+
+if (is.na(gene_attributes_path) || !file.exists(gene_attributes_path)) {
+  stop("gene_attributes.csv not found. Checked:\n", paste(gene_attributes_candidates, collapse = "\n"))
+}
+
+# Module CSVs: these usually live in the PyWGCNA outputPath/figures folder.
+# This fallback list makes the script robust to where PyWGCNA actually wrote them.
+module_connectivity_dir_candidates <- c(
+  file.path(wgcna_run_dir, "figures"),
+  file.path(base_dir, "figures"),
+  file.path(base_dir, "results", "figures"),
+  file.path(base_dir, "results_batch", "figures")
+)
+
+module_connectivity_dir <- module_connectivity_dir_candidates[dir.exists(module_connectivity_dir_candidates)][1]
+
+if (is.na(module_connectivity_dir) || !dir.exists(module_connectivity_dir)) {
+  stop("Module figures directory not found. Checked:\n",
+       paste(module_connectivity_dir_candidates, collapse = "\n"))
+}
+
+cat("Using TOM file:\n", tom_path, "\n")
+cat("Using gene attributes file:\n", gene_attributes_path, "\n")
+cat("Using module connectivity directory:\n", module_connectivity_dir, "\n")
+
+# ---------------------------
+# Plot/device helpers: PNG + SVG
+# ---------------------------
+save_plot_png_svg <- function(plot_obj, png_file, svg_file,
+                              width = 6, height = 6, dpi = 300,
+                              bg = "white") {
+  
+  ggsave(
+    filename = png_file,
+    plot = plot_obj,
+    width = width,
+    height = height,
+    dpi = dpi,
+    bg = bg
+  )
+  
+  ggsave(
+    filename = svg_file,
+    plot = plot_obj,
+    device = svglite::svglite,
+    width = width,
+    height = height,
+    bg = bg
+  )
+}
+
+save_base_plot_png_svg <- function(plot_expr, png_file, svg_file,
+                                   width_px = 800, height_px = 300,
+                                   res = 150, bg = "white") {
+  
+  png(
+    filename = png_file,
+    width = width_px,
+    height = height_px,
+    res = res,
+    bg = bg
+  )
+  eval.parent(substitute(plot_expr))
+  dev.off()
+  
+  svglite::svglite(
+    filename = svg_file,
+    width = width_px / res,
+    height = height_px / res,
+    bg = bg
+  )
+  eval.parent(substitute(plot_expr))
+  dev.off()
+}
+
+## ---- DROP-IN REPLACEMENT: load TOM + gene_attrib + cluster + plot ----
+
+# Load TOM.feather
+tom_tbl <- read_feather(tom_path)
+tom_tbl <- as.data.frame(tom_tbl)
+
+# Use the ID column (expected: "gene") as rownames
+if (!("gene" %in% names(tom_tbl))) {
+  stop("TOM.feather is missing a 'gene' column. Check the feather file columns.")
+}
+rownames(tom_tbl) <- tom_tbl$gene
+
+# Convert to numeric matrix and drop the ID column
+tom <- as.matrix(tom_tbl[, setdiff(names(tom_tbl), "gene"), drop = FALSE])
+storage.mode(tom) <- "double"
+
+# Make sure colnames exist & match
+if (is.null(colnames(tom))) stop("TOM matrix has no column names after conversion.")
+if (is.null(rownames(tom))) rownames(tom) <- colnames(tom)
+
+# Optional sanity checks
+stopifnot(nrow(tom) == ncol(tom))
+stopifnot(identical(rownames(tom), colnames(tom)))
+
+# Free memory early
+rm(tom_tbl); gc()
+
+# Load gene attributes and confirm alignment
+gene_attrib <- read.csv(gene_attributes_path, row.names = 1)
+
+overlap <- intersect(rownames(tom), rownames(gene_attrib))
+if (length(overlap) != nrow(tom)) {
+  stop(
+    paste0(
+      "ID mismatch between TOM and gene_attributes.csv. Overlap = ",
+      length(overlap), " of ", nrow(tom),
+      ". (You may need to strip Ensembl version suffixes.)"
+    )
+  )
+}
+
+# Compute dissimilarity + clustering (memory-friendly cleanup)
+dissim <- 1 - tom
+rm(tom); gc()
+
+d <- as.dist(dissim)
+rm(dissim); gc()
+
+dendro <- hclust(d, method = "average")
+rm(d); gc()
+
+# --- Make sure dendro has labels; if not, assign them from gene_attrib ---
+if (is.null(dendro$labels)) {
+  # This assumes the gene order used to build 'tom' matches rownames(gene_attrib),
+  # which should be true in your pipeline.
+  dendro$labels <- rownames(gene_attrib)
+}
+
+# Build colors vector in the SAME order as dendro labels
+colors_vec <- gene_attrib[dendro$labels, "moduleColors"]
+colors_vec <- as.character(colors_vec)  # safest for WGCNA plotting
+# Fix non-standard/invalid color labels
+colors_vec[colors_vec == "silver"] <- "grey"   # or "#C0C0C0"
+
+
+# Sanity check
+stopifnot(length(colors_vec) == length(dendro$labels))
+
+# Plot to screen
+plotDendroAndColors(
+  dendro,
+  colors_vec,
+  "Module colors",
+  dendroLabels = FALSE,
+  addGuide = TRUE,
+  hang = 0.03,
+  guideHang = 0.05
+)
+
+# Save to file
+outdir <- file.path(base_dir, "results_batch", "TOM_gene_attributes")
+outdir_png <- file.path(outdir, "PNG")
+outdir_svg <- file.path(outdir, "SVG")
+
+dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
+dir.create(outdir_png, recursive = TRUE, showWarnings = FALSE)
+dir.create(outdir_svg, recursive = TRUE, showWarnings = FALSE)
+
+save_base_plot_png_svg(
+  plot_expr = plotDendroAndColors(
+    dendro,
+    colors_vec,
+    "Module colors",
+    dendroLabels = FALSE,
+    addGuide = TRUE,
+    hang = 0.03,
+    guideHang = 0.05
+  ),
+  png_file = file.path(outdir_png, "dendrogram_modules.png"),
+  svg_file = file.path(outdir_svg, "dendrogram_modules.svg"),
+  width_px = 800,
+  height_px = 300,
+  res = 150
+)
+
+
+## ---- END DROP-IN REPLACEMENT ----
+
+
+# 2) Save full TOM heatmap (rasterized)
+  #takes a while to run and memory intensive
+    #might run eventually, but haven't just let it go for a bit
+# library(ComplexHeatmap)
+# 
+# png(
+#   filename = file.path(outdir, "TOM_heatmap_complex.png"),
+#   width    = 800,
+#   height   = 800,
+#   res      = 150
+# )
+# Heatmap(
+#   tom,
+#   name             = "TOM",
+#   cluster_rows     = dendro,
+#   cluster_columns  = dendro,
+#   show_row_dend    = TRUE,
+#   show_column_dend = TRUE,
+#   use_raster       = TRUE,
+#   raster_device    = "png",
+#   raster_quality   = 3,
+#   row_names_gp     = gpar(fontsize = 6),
+#   column_names_gp  = gpar(fontsize = 6)
+# )
+# dev.off()
+
+
+
+# create the output directory if it doesn’t exist
+# if (!dir.exists("wgcna_output")) dir.create("wgcna_output")
+# 
+# # open a PNG device: 800×800 pixels at 150 dpi
+# png(
+#   filename   = "wgcna_output/TOM_heatmap.png",
+#   width      = 800, 
+#   height     = 800,
+#   res        = 150
+# )
+# 
+# # draw the plot
+# TOMplot(
+#   tom, 
+#   dendro, 
+#   Colors     = gene_attrib$moduleColors, 
+#   ColorsLeft = gene_attrib$moduleColors
+# )
+# 
+# # close the device, writing the file
+# dev.off()
+#way too intensive to run
+
+
+# read in the csv files for each module (assuming they are in a folder, 
+# filter for most connect genes, and then display that network. With a cut-off?)
+
+library(dplyr)
+library(igraph)
+library(ggraph)
+library(ggplot2)
+library(biomaRt)
+
+# Use module connectivity/gene attribute CSVs from the batch-corrected WGCNA run.
+module_files <- list.files(module_connectivity_dir, pattern = "\\.csv$", full.names = TRUE)
+if (length(module_files) == 0) {
+  stop("No module CSV files found in batch-corrected figures directory: ", module_connectivity_dir)
+}
+
+# ---- Analysis-specific output directory ----
+outdir <- file.path(base_dir, "results_batch", "WGCNA_networks_weighted")
+outdir_png <- file.path(outdir, "PNG")
+outdir_svg <- file.path(outdir, "SVG")
+
+dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
+dir.create(outdir_png, recursive = TRUE, showWarnings = FALSE)
+dir.create(outdir_svg, recursive = TRUE, showWarnings = FALSE)
+
+# Reload TOM (if it was removed earlier to save memory)
+if (!exists("tom")) {
+  tom_tbl <- read_feather(tom_path)
+  tom_tbl <- as.data.frame(tom_tbl)
+  rownames(tom_tbl) <- tom_tbl$gene
+  tom <- as.matrix(tom_tbl[, setdiff(names(tom_tbl), "gene"), drop = FALSE])
+  storage.mode(tom) <- "double"
+  rm(tom_tbl); gc()
+}
+
+
+threshold <- 0.001  # keep edges with TOM >= threshold, but retain weights
+
+strip_ver <- function(x) sub("\\.[0-9]+$", "", x)
+fix_color <- function(x) ifelse(x == "silver", "#C0C0C0", x)
+
+# ---- Build Ensembl -> HGNC symbol lookup ONCE (human) ----
+tom_ens_novers <- unique(strip_ver(rownames(tom)))
+
+mart <- biomaRt::useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl")
+
+map_tbl <- biomaRt::getBM(
+  attributes = c("ensembl_gene_id", "hgnc_symbol"),
+  filters    = "ensembl_gene_id",
+  values     = tom_ens_novers,
+  mart       = mart
+) %>%
+  filter(hgnc_symbol != "") %>%
+  distinct(ensembl_gene_id, .keep_all = TRUE)
+
+ens2sym <- setNames(map_tbl$hgnc_symbol, map_tbl$ensembl_gene_id)
+
+
+# --- Helper: keep only top-k strongest edges per node (keeps weights) ---
+thin_topk_edges <- function(mat, k = 8) {
+  stopifnot(nrow(mat) == ncol(mat))
+  keep <- matrix(0, nrow(mat), ncol(mat), dimnames = dimnames(mat))
+  
+  for (i in seq_len(nrow(mat))) {
+    w <- mat[i, ]
+    w[i] <- 0
+    idx <- which(w > 0)
+    if (length(idx) == 0) next
+    idx <- idx[order(w[idx], decreasing = TRUE)]
+    idx <- head(idx, k)
+    keep[i, idx] <- mat[i, idx]
+  }
+  
+  # Symmetrize while keeping weights
+  keep <- pmax(keep, t(keep))
+  keep
+}
+
+for (f in module_files) {
+  
+  module <- read.csv(f, stringsAsFactors = FALSE)
+  
+  if (!("X" %in% names(module))) {
+    warning("Skipping (no 'X' column): ", f)
+    next
+  }
+  
+  module <- module %>% distinct(X, .keep_all = TRUE)
+  rownames(module) <- module$X
+  module$X <- NULL
+  
+  if (!("moduleColors" %in% names(module))) {
+    warning("Skipping (no 'moduleColors' column): ", f)
+    next
+  }
+  
+  module_color <- unique(module$moduleColors)
+  module_color <- module_color[!is.na(module_color)][1]
+  module_color_plot <- fix_color(module_color)
+  
+  # ---- Add symbol column from Ensembl IDs (rownames) ----
+  module$symbol <- unname(ens2sym[strip_ver(rownames(module))])
+  module$symbol[is.na(module$symbol)] <- ""
+  
+  # Save symbols list
+  genes <- module$symbol[module$symbol != ""]
+  writeLines(genes, con = file.path(outdir, paste0(module_color, "_genes.txt")))
+  
+  if (!("connectivity_zscore" %in% names(module))) {
+    warning("Skipping (no 'connectivity_zscore' column): ", f)
+    next
+  }
+  
+  # ---- Label top hub genes (TOP 20 for readability) ----
+  module$network_label <- ""
+  hub_genes <- rownames(module %>% arrange(desc(connectivity_zscore)) %>% head(n = 20))
+  module[hub_genes, "network_label"] <- module[hub_genes, "symbol"]
+  
+  # Keep only hub genes present in TOM
+  common_genes <- intersect(hub_genes, rownames(tom))
+  if (length(common_genes) == 0) next
+  
+  sub.tom <- tom[common_genes, common_genes, drop = FALSE]
+  
+  # Threshold edges but keep weights
+  sub.tom[sub.tom < threshold] <- 0
+  
+  # Thin edges for readability (top-k per node)
+  sub.tom <- thin_topk_edges(sub.tom, k = 8)
+  
+  # Extra safety: enforce symmetry explicitly (prevents igraph warning)
+  sub.tom <- pmax(sub.tom, t(sub.tom))
+  
+  network <- graph_from_adjacency_matrix(
+    sub.tom,
+    mode = "undirected",
+    weighted = TRUE,
+    diag = FALSE
+  )
+  
+  # Drop isolated nodes
+  network <- delete_vertices(network, which(degree(network) == 0))
+  if (vcount(network) == 0) next
+  
+  # Node labels & size
+  V(network)$label <- module[V(network)$name, "network_label"]
+  V(network)$node_size <- pmax(
+    module[V(network)$name, "connectivity_zscore"],
+    0.1
+  )
+  
+  p <- ggraph(network, layout = "stress") +
+    geom_edge_link(aes(width = weight), edge_colour = "grey", edge_alpha = 0.6) +
+    geom_node_point(
+      aes(size = node_size),
+      alpha = 0.9,
+      colour = module_color_plot
+    ) +
+    scale_size(range = c(2, 10)) +
+    geom_node_label(aes(label = label), repel = TRUE, size = 3) +
+    theme_void()
+  
+  out_png <- file.path(
+    outdir_png,
+    paste0(module_color, "_", threshold, "_top20_weighted_topk8.png")
+  )
+  
+  out_svg <- file.path(
+    outdir_svg,
+    paste0(module_color, "_", threshold, "_top20_weighted_topk8.svg")
+  )
+  
+  save_plot_png_svg(
+    plot_obj = p,
+    png_file = out_png,
+    svg_file = out_svg,
+    width = 6,
+    height = 6,
+    dpi = 300
+  )
+}
+
+
+
+
+
+
+
+cat("Batch-corrected TOM/gene-attribute workflow complete. Outputs written under:
+",
+    file.path(base_dir, "results_batch"), "
+")
