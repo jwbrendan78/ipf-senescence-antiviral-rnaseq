@@ -1,0 +1,41 @@
+# R
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+
+# Python / Jupyter
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# Nextflow
+.nextflow/
+.nextflow.log*
+work/
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Large sequencing / analysis outputs
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+*.bam
+*.sam
+*.cram
+
+# Local intermediate data
+*.rds
+*.RDS
+*.feather
+
+# Common large output folders
+results/
+salmon/
+pipeline_info/
