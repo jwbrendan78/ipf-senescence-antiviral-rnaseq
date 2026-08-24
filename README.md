@@ -23,6 +23,20 @@ DOI: **10.1038/s41514-026-00388-4**
 
 For the current study, a subset of this dataset was reanalyzed using a donor-aware differential expression framework and gene set enrichment analysis.
 
+## External analysis resources
+
+### CollecTRI
+
+Transcription factor activity inference for the Jena RNA-seq dataset uses the CollecTRI transcription factor-target interaction resource.
+
+`CollecTRI_source.tsv` is treated as an external analysis dependency and is not redistributed in this repository. Users should obtain the CollecTRI source data separately and update the `collectri_path` setting near the top of:
+
+`scripts/jena/01_jena_rnaseq_deseq2_and_downstream.R`
+
+For reproducibility, the CollecTRI source file used for the reported analysis had the following SHA-256 checksum:
+
+`584c057743c3bd4d5e9b362bfff5400dd614244cdf1cd51d0e9791866b719ab5`
+
 ## Repository structure
 
 ```text
