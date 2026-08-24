@@ -2,6 +2,10 @@
 # Part 2: New-dataset antiviral GSEA analysis only
 # ============================================================
 #
+# Public dataset: GEO GSE328392 (SuperSeries GSE328437)
+# Original dataset publication: Hughes et al. (2026), npj Aging,
+# DOI: 10.1038/s41514-026-00388-4
+#
 # Purpose
 # -------
 # Analyze the larger Rubedo RNA-seq dataset at baseline and
@@ -40,7 +44,8 @@
 # 0) USER CONFIGURATION
 # ============================================================
 
-project_dir <- "D:/Rubedo_E001"
+# Set this to the local directory containing the Rubedo validation dataset.
+project_dir <- "PATH/TO/RUBEDO_PROJECT_DIRECTORY"
 
 pipeline_dir <- file.path(
   project_dir,
@@ -76,12 +81,10 @@ expected_ipf_donors <- 9
 # Reuse the exact MSigDB gene-set objects from the original
 # analysis whenever they are available. This maximizes direct
 # comparability and avoids MSigDB-version drift.
-old_gsea_root <- paste0(
-  "C:/Users/jwbre/Documents/Campisi/",
-  "Jena_collab_exps_all fastqs/",
-  "Jena_collab_revisions/results_revision/",
-  "Reviewer_additions/GSEA_antiviral"
-)
+# Optional: point this to the GSEA_antiviral output directory from the Jena
+# analysis to reuse the exact saved MSigDB gene-set objects. If the files are
+# absent, the script falls back to the current MSigDB collections via msigdbr.
+old_gsea_root <- "PATH/TO/JENA_GSEA_ANTIVIRAL_RESULTS"
 
 old_geneset_dir <- file.path(
   old_gsea_root,
