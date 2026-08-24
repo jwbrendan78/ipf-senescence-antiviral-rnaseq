@@ -21,6 +21,8 @@ This dataset was originally reported in:
 Hughes et al. (2026). *Uncovering senescent fibroblast heterogeneity connects DNA damage response to idiopathic pulmonary fibrosis*. npj Aging.  
 DOI: **10.1038/s41514-026-00388-4**
 
+For the current study, a subset of this dataset was reanalyzed using a donor-aware differential expression framework and gene set enrichment analysis.
+
 ## Repository structure
 
 ```text
@@ -48,17 +50,19 @@ ipf-senescence-antiviral-rnaseq/
         ├── run_nfcore_rnaseq_salmon_SS_0_240_exclude_corrupted.sh
         ├── samplesheet_SS_0_240_exclude_corrupted.csv
         └── exclude_corrupted_fastqs.txt
+```
 
 ## Analysis overview
 
 ### Jena primary RNA-seq dataset
 
-The primary dataset was analyzed using:
+The primary Jena RNA-seq dataset was analyzed using:
 
 - Salmon-based RNA-seq quantification
 - DESeq2 differential expression analysis with disease, infection, senescence condition, and batch included in the model
-- PCA of variance-stabilized expression values
-- Differentially expressed gene overlap and pathway enrichment analyses
+- Principal component analysis of variance-stabilized expression values
+- Differentially expressed gene overlap analyses
+- Gene ontology and pathway enrichment analyses
 - Batch-corrected WGCNA co-expression network analysis
 - Module enrichment and hub-gene network visualization
 - Transcription factor activity inference using CollecTRI and decoupleR
@@ -67,15 +71,33 @@ The primary dataset was analyzed using:
 
 The independent Rubedo dataset was reanalyzed using a donor-aware mixed-model framework with `dream`, followed by preranked gene set enrichment analysis focused on antiviral and interferon-related pathways.
 
+The analysis uses serum-starved samples at timepoints 0 and 240. Sample `L001003b` was excluded because of a known corrupted FASTQ file, resulting in 62 samples in the RNA-seq analysis.
+
 ## Software and dependencies
 
 ### R analyses
 
-The R scripts use Bioconductor and CRAN packages including DESeq2, tximport, limma, variancePartition, fgsea, clusterProfiler, decoupleR, and related visualization and annotation packages.
+The R scripts use Bioconductor and CRAN packages including:
+
+- DESeq2
+- tximport
+- limma
+- variancePartition
+- fgsea
+- clusterProfiler
+- decoupleR
+- AnnotationDbi
+- org.Hs.eg.db
+- ggplot2
+- WGCNA
+
+Additional packages used by individual analyses are loaded within the corresponding scripts.
 
 ### Python / WGCNA
 
-The PyWGCNA analysis was performed in Python. Python package versions used for the analysis are provided in:
+WGCNA module construction and module-trait analyses were performed using PyWGCNA in Python.
+
+Python package versions used for the analysis are provided in:
 
 `requirements.txt`
 
@@ -87,8 +109,42 @@ For the Rubedo validation dataset, RNA-seq processing was performed using:
 - Nextflow v25.10.2
 - Docker
 - Salmon pseudoalignment
-- GENCODE v49 primary assembly reference files
+- No read trimming
+- No genome alignment
+- GENCODE v49 primary assembly FASTA and GTF reference files
 
 The exact Rubedo workflow and samplesheet are provided in `workflow/rubedo/`.
 
 Details of the Jena RNA-seq processing workflow are provided in `workflow/jena/README.md`.
+
+## Running the analyses
+
+### Jena dataset
+
+The Jena analysis scripts are intended to be run in the following order:
+
+1. `scripts/jena/01_jena_rnaseq_deseq2_and_downstream.R`  
+   Performs differential expression analysis, PCA, DEG overlap analyses, pathway enrichment, transcription factor activity inference, and related downstream analyses.
+
+2. `scripts/jena/02_jena_wgcna_preprocessing.R`  
+   Generates the batch-corrected, variance-filtered expression matrix and corresponding metadata used for WGCNA.
+
+3. `scripts/jena/03_jena_wgcna_batch_corrected.ipynb`  
+   Performs PyWGCNA module construction and module-trait relationship analyses.
+
+4. `scripts/jena/04_jena_wgcna_networks.R`  
+   Generates downstream module dendrograms, hub-gene networks, and related WGCNA visualizations.
+
+### Rubedo validation dataset
+
+The Rubedo validation analysis is performed with:
+
+`scripts/rubedo/01_rubedo_antiviral_gsea_dream.R`
+
+RNA-seq quantification details, the nf-core/rnaseq command, and the analysis samplesheet are provided in:
+
+`workflow/rubedo/`
+
+## License
+
+This repository is available under the MIT License. See `LICENSE` for details.
