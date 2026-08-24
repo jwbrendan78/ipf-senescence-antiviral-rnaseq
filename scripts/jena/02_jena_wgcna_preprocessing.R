@@ -11,7 +11,7 @@
 #
 # Required local inputs include:
 #   Jena_collab_exps_results/txi_rawcounts.rds
-#   Jena_collab_exps_results/meta_aligned.rds
+#   metadata/jena_analysis_metadata.csv from this GitHub repository
 #   DEG result files under results_batch/DESeq2/DEGs_3way_clear_labels
 #   PyWGCNA module outputs under WGCNA/
 #
@@ -25,9 +25,31 @@
 # Set this to the local Jena project directory.
 project_dir <- "PATH/TO/JENA_PROJECT_DIRECTORY"
 
+# Set this to the root of the cloned GitHub repository.
+repo_dir <- "PATH/TO/ipf-senescence-antiviral-rnaseq"
+
+metadata_file <- file.path(
+  repo_dir,
+  "metadata",
+  "jena_analysis_metadata.csv"
+)
+
 if (!dir.exists(project_dir)) {
   stop(
     "Project directory not found. Update 'project_dir' at the top of this script."
+  )
+}
+
+if (!dir.exists(repo_dir)) {
+  stop(
+    "Repository directory not found. Update 'repo_dir' at the top of this script."
+  )
+}
+
+if (!file.exists(metadata_file)) {
+  stop(
+    "Jena analysis metadata not found: ", metadata_file,
+    "\nUpdate 'repo_dir' or 'metadata_file' at the top of this script."
   )
 }
 
@@ -45,10 +67,32 @@ library(dplyr)
 library(svglite)
 library(limma)
 
-txi  <- readRDS(file.path(jena_results_dir, "txi_rawcounts.rds"))
-meta <- readRDS(file.path(jena_results_dir, "meta_aligned.rds"))
+txi <- readRDS(file.path(jena_results_dir, "txi_rawcounts.rds"))
 
-# Batch-adjusted version: make sure metadata is current and aligned
+meta <- readr::read_csv(
+  metadata_file,
+  show_col_types = FALSE
+) %>%
+  as.data.frame(stringsAsFactors = FALSE)
+
+stopifnot(
+  "tube_folder_label" %in% colnames(meta),
+  anyDuplicated(meta$tube_folder_label) == 0
+)
+
+rownames(meta) <- meta$tube_folder_label
+
+missing_metadata_samples <- setdiff(colnames(txi$counts), rownames(meta))
+if (length(missing_metadata_samples) > 0) {
+  stop(
+    "The following count-matrix samples are missing from jena_analysis_metadata.csv: ",
+    paste(missing_metadata_samples, collapse = ", ")
+  )
+}
+
+meta <- meta[colnames(txi$counts), , drop = FALSE]
+
+# Batch-adjusted version: make sure metadata are current and aligned
 stopifnot("batch" %in% colnames(meta))
 stopifnot(identical(rownames(meta), colnames(txi$counts)))
 print(table(meta$batch, useNA = "ifany"))

@@ -5,9 +5,9 @@
 #
 # Required local inputs for the downstream analysis include:
 #   Jena_collab_exps_results/txi_rawcounts.rds
-#   Jena_collab_exps_results/meta_aligned.rds
 #   Jena_collab_exps_results/salmon.merged.gene_counts.tsv
-#   CollecTRI_source.tsv
+#   metadata/jena_analysis_metadata.csv from this GitHub repository
+#   CollecTRI_source.tsv (external dependency; see repository README)
 #
 # The commented tximport block below documents how txi_rawcounts.rds
 # was generated from per-sample Salmon quant.sf files and tx2gene.tsv.
@@ -22,10 +22,37 @@
 # Set this to the local directory containing the Jena analysis inputs.
 base_dir <- "PATH/TO/JENA_PROJECT_DIRECTORY"
 
+# Set this to the root of the cloned GitHub repository.
+repo_dir <- "PATH/TO/ipf-senescence-antiviral-rnaseq"
+
+# Analysis-ready metadata distributed with this repository.
+metadata_file <- file.path(
+  repo_dir,
+  "metadata",
+  "jena_analysis_metadata.csv"
+)
+
+# CollecTRI is an external dependency and is not redistributed here.
+# Download the source TSV separately and update this path.
+collectri_path <- "PATH/TO/CollecTRI_source.tsv"
+
 if (!dir.exists(base_dir)) {
   stop(
     "Project directory not found. Update 'base_dir' at the top of this script ",
     "to the local directory containing the Jena analysis files."
+  )
+}
+
+if (!dir.exists(repo_dir)) {
+  stop(
+    "Repository directory not found. Update 'repo_dir' at the top of this script."
+  )
+}
+
+if (!file.exists(metadata_file)) {
+  stop(
+    "Jena analysis metadata not found: ", metadata_file,
+    "\nUpdate 'repo_dir' or 'metadata_file' at the top of this script."
   )
 }
 
@@ -121,8 +148,34 @@ library(dplyr)
 
 # important imports -------------------------------------------------------
 
-txi  <- readRDS(file.path(jena_results_dir, "txi_rawcounts.rds"))
-meta <- readRDS(file.path(jena_results_dir, "meta_aligned.rds"))
+txi <- readRDS(file.path(jena_results_dir, "txi_rawcounts.rds"))
+
+# Read the exact 27-sample analysis metadata distributed with this repository.
+meta <- readr::read_csv(
+  metadata_file,
+  show_col_types = FALSE
+) %>%
+  as.data.frame(stringsAsFactors = FALSE)
+
+stopifnot(
+  "tube_folder_label" %in% colnames(meta),
+  anyDuplicated(meta$tube_folder_label) == 0
+)
+
+rownames(meta) <- meta$tube_folder_label
+
+missing_metadata_samples <- setdiff(colnames(txi$counts), rownames(meta))
+if (length(missing_metadata_samples) > 0) {
+  stop(
+    "The following count-matrix samples are missing from jena_analysis_metadata.csv: ",
+    paste(missing_metadata_samples, collapse = ", ")
+  )
+}
+
+# Reorder metadata to match the tximport count matrix exactly.
+meta <- meta[colnames(txi$counts), , drop = FALSE]
+
+stopifnot(identical(rownames(meta), colnames(txi$counts)))
 
 
 
@@ -133,9 +186,11 @@ meta <- readRDS(file.path(jena_results_dir, "meta_aligned.rds"))
 
 # library(DESeq2)
 # 
-# # Reload the unchanged original analysis inputs
-# txi  <- readRDS(file.path(jena_results_dir, "txi_rawcounts.rds"))
-# meta <- readRDS(file.path(jena_results_dir, "meta_aligned.rds"))
+# # Reload the unchanged count object and repository analysis metadata if needed.
+# txi <- readRDS(file.path(jena_results_dir, "txi_rawcounts.rds"))
+# meta <- readr::read_csv(metadata_file, show_col_types = FALSE) %>% as.data.frame()
+# rownames(meta) <- meta$tube_folder_label
+# meta <- meta[colnames(txi$counts), , drop = FALSE]
 
 # ------------------------------------------------------------
 # 1) Basic input checks
@@ -363,12 +418,11 @@ print(baseline_details, row.names = FALSE)
 # cat("Wrote GEO raw file helper TSV:\n", out_geo_raw_path, "\n")
 
 # Batch-aware script checks ------------------------------------------------
-# This script assumes meta_aligned.rds has already been rebuilt from the
-# updated metadata CSV and contains the batch column.
+# Metadata are read directly from metadata/jena_analysis_metadata.csv.
 stopifnot("batch" %in% colnames(meta))
 stopifnot(identical(rownames(meta), colnames(txi$counts)))
 meta$batch <- factor(meta$batch)
-cat("Batch counts in meta_aligned.rds:\n")
+cat("Batch counts in jena_analysis_metadata.csv:\n")
 print(table(meta$batch, useNA = "ifany"))
 
 
@@ -2839,8 +2893,13 @@ for (cmp in comparisons) {
 # Figure 4 TF analysis and is also used for reviewer additions.
 # ============================================================
 
-collectri_path <- file.path(base_dir, "CollecTRI_source.tsv")
-stopifnot(file.exists(collectri_path))
+if (!file.exists(collectri_path)) {
+  stop(
+    "CollecTRI_source.tsv was not found at: ", collectri_path,
+    "\nDownload the external CollecTRI source file and update 'collectri_path' ",
+    "at the top of this script. See the repository README for provenance and checksum."
+  )
+}
 
 collectri_raw <- readr::read_tsv(
   collectri_path,
