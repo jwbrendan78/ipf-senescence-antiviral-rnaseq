@@ -47,19 +47,20 @@
 # Set this to the local directory containing the Rubedo validation dataset.
 project_dir <- "PATH/TO/RUBEDO_PROJECT_DIRECTORY"
 
+# Set this to the root of the cloned GitHub repository.
+repo_dir <- "PATH/TO/ipf-senescence-antiviral-rnaseq"
+
 pipeline_dir <- file.path(
   project_dir,
   "nextflow"
 )
 
+# Exact 62-sample validation metadata distributed with this repository.
 metadata_file <- file.path(
-  project_dir,
-  "nextflow",
-  "samplesheets",
-  "Rubedo_metadata.xlsx"
+  repo_dir,
+  "metadata",
+  "rubedo_validation_metadata.csv"
 )
-
-metadata_sheet <- "Rubedo_metadata_combined"
 
 output_root <- file.path(
   project_dir,
@@ -102,7 +103,6 @@ old_gsea_results_rds <- file.path(
 # ============================================================
 
 required_packages <- c(
-  "readxl",
   "readr",
   "dplyr",
   "tidyr",
@@ -138,7 +138,6 @@ if (length(missing_packages) > 0) {
 }
 
 suppressPackageStartupMessages({
-  library(readxl)
   library(readr)
   library(dplyr)
   library(tidyr)
@@ -300,6 +299,7 @@ map_ids_to_symbols <- function(gene_ids, gene_annot) {
 
 stopifnot(
   dir.exists(project_dir),
+  dir.exists(repo_dir),
   dir.exists(pipeline_dir),
   file.exists(metadata_file)
 )
@@ -324,7 +324,7 @@ cat(
   "\n================ INPUT FILES ================\n",
   "Merged Salmon gene counts:\n",
   normalizePath(merged_counts_file),
-  "\n\nMetadata workbook:\n",
+  "\n\nAnalysis metadata CSV:\n",
   normalizePath(metadata_file),
   "\n",
   sep = ""
@@ -365,9 +365,10 @@ gene_annot <- counts_tbl %>%
 # 5) READ AND STANDARDIZE METADATA
 # ============================================================
 
-meta_raw <- readxl::read_excel(
+meta_raw <- readr::read_csv(
   metadata_file,
-  sheet = metadata_sheet
+  show_col_types = FALSE,
+  progress = FALSE
 ) %>%
   as.data.frame(stringsAsFactors = FALSE)
 
