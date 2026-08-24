@@ -66,3 +66,29 @@ The primary dataset was analyzed using:
 ### Rubedo validation dataset
 
 The independent Rubedo dataset was reanalyzed using a donor-aware mixed-model framework with `dream`, followed by preranked gene set enrichment analysis focused on antiviral and interferon-related pathways.
+
+## Software and dependencies
+
+### R analyses
+
+The R scripts use Bioconductor and CRAN packages including DESeq2, tximport, limma, variancePartition, fgsea, clusterProfiler, decoupleR, and related visualization and annotation packages.
+
+### Python / WGCNA
+
+The PyWGCNA analysis was performed in Python. Python package versions used for the analysis are provided in:
+
+`requirements.txt`
+
+### RNA-seq processing
+
+For the Rubedo validation dataset, RNA-seq processing was performed using:
+
+- nf-core/rnaseq v3.14.0
+- Nextflow v25.10.2
+- Docker
+- Salmon pseudoalignment
+- GENCODE v49 primary assembly reference files
+
+The exact Rubedo workflow and samplesheet are provided in `workflow/rubedo/`.
+
+Details of the Jena RNA-seq processing workflow are provided in `workflow/jena/README.md`.
