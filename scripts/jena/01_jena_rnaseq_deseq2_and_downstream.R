@@ -1,7 +1,18 @@
 # ----------------------------
 # Setup
 # ----------------------------
-base_dir <- "C:/Users/jwbre/Documents/Campisi/Jena_collab_exps_all fastqs/"
+
+# Set this to the local directory containing the Jena RNA-seq analysis files.
+# Processed sequencing data are available from GEO: GSE334185.
+base_dir <- "PATH/TO/JENA_PROJECT_DIRECTORY"
+
+if (!dir.exists(base_dir)) {
+  stop(
+    "Project directory not found. Update 'base_dir' at the top of this script ",
+    "to the local directory containing the Jena analysis files."
+  )
+}
+
 setwd(base_dir)
 
 # ============================================================
