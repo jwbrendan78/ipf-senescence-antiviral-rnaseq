@@ -1,18 +1,41 @@
-#pre and post WGCNA script for IPF project for Jena group
-# BATCH-ADJUSTED VERSION
-# Minimal changes:
-#   1) checks that meta_aligned.rds contains batch and is aligned to txi
-#   2) DESeq2 design includes additive batch covariate
-#   3) WGCNA expression matrix is VST + limma batch-corrected for module construction
-#   4) outputs go to results_batch / batch-named files
-
-
+# ============================================================
+# Jena batch-adjusted WGCNA preprocessing and post-WGCNA analysis
+# ============================================================
+# Primary RNA-seq dataset: GEO GSE334185
+#
+# Purpose:
+#   1) verify aligned tximport counts and metadata
+#   2) fit the batch-adjusted DESeq2 model
+#   3) generate the batch-corrected, variance-filtered matrix used by PyWGCNA
+#   4) perform DEG/module overlap and module enrichment analyses after PyWGCNA
+#
+# Required local inputs include:
+#   Jena_collab_exps_results/txi_rawcounts.rds
+#   Jena_collab_exps_results/meta_aligned.rds
+#   DEG result files under results_batch/DESeq2/DEGs_3way_clear_labels
+#   PyWGCNA module outputs under WGCNA/
+#
+# Statistical models and filtering thresholds are unchanged.
+# ============================================================
 
 # ----------------------------
 # Setup
 # ----------------------------
-base_dir <- "C:/Users/jwbre/Documents/Campisi/Jena_collab_exps_all fastqs/WGCNA/"
+
+# Set this to the local Jena project directory.
+project_dir <- "PATH/TO/JENA_PROJECT_DIRECTORY"
+
+if (!dir.exists(project_dir)) {
+  stop(
+    "Project directory not found. Update 'project_dir' at the top of this script."
+  )
+}
+
+base_dir <- file.path(project_dir, "WGCNA")
+dir.create(base_dir, recursive = TRUE, showWarnings = FALSE)
 setwd(base_dir)
+
+jena_results_dir <- file.path(project_dir, "Jena_collab_exps_results")
 
 
 library(tximport)
@@ -22,8 +45,8 @@ library(dplyr)
 library(svglite)
 library(limma)
 
-txi  <- readRDS("C:/Users/jwbre/Documents/Campisi/Jena_collab_exps_all fastqs/Jena_collab_exps_results/txi_rawcounts.rds")
-meta <- readRDS("C:/Users/jwbre/Documents/Campisi/Jena_collab_exps_all fastqs/Jena_collab_exps_results/meta_aligned.rds")
+txi  <- readRDS(file.path(jena_results_dir, "txi_rawcounts.rds"))
+meta <- readRDS(file.path(jena_results_dir, "meta_aligned.rds"))
 
 # Batch-adjusted version: make sure metadata is current and aligned
 stopifnot("batch" %in% colnames(meta))
@@ -74,7 +97,7 @@ Jena.wpn.vsd.batch_corrected <- limma::removeBatchEffect(
 Jena.rv.wpn <- rowVars(Jena.wpn.vsd.batch_corrected)
 summary(Jena.rv.wpn)
 
-#make expression matrix only top 75% of variable genes
+# keep the top 25% most variable genes (above the 75th-percentile variance cutoff)
 q75_wpn <- quantile(rowVars(Jena.wpn.vsd.batch_corrected), .75)
 expr_normalized <- Jena.wpn.vsd.batch_corrected[Jena.rv.wpn > q75_wpn, ]
 dim(expr_normalized)
@@ -146,8 +169,7 @@ write.csv(expr_normalized,
 # - Robust symbol mapping (strips ENS version, filters to ENSG only, filters to valid keys)
 # ============================================================
 
-base_dir <- "C:/Users/jwbre/Documents/Campisi/Jena_collab_exps_all fastqs/WGCNA/"
-setwd(base_dir)
+# Continue using project_dir/base_dir configured at the top of this script.
 
 library(tidyverse)
 library(AnnotationDbi)
@@ -156,14 +178,14 @@ library(org.Hs.eg.db)
 # ---------------------------
 # Paths
 # ---------------------------
-deg_dir <- "C:/Users/jwbre/Documents/Campisi/Jena_collab_exps_all fastqs/results_batch/DESeq2/DEGs_3way_clear_labels"
+deg_dir <- file.path(project_dir, "results_batch", "DESeq2", "DEGs_3way_clear_labels")
 
 # IMPORTANT: point to WGCNA output root
-wgcna_root <- file.path(getwd(), "Jena_count_DEseq2_batchCorrected_nonzero_50mod_0.4thresh_robustZ_diffNames")
+wgcna_root <- file.path(base_dir, "Jena_count_DEseq2_batchCorrected_nonzero_50mod_0.4thresh_robustZ_diffNames")
 # Update this path if your new batch-corrected WGCNA run has a different folder name.
 stopifnot(dir.exists(wgcna_root))
 
-output_base <- file.path(getwd(), "results_batch")
+output_base <- file.path(base_dir, "results_batch")
 dir.create(output_base, recursive = TRUE, showWarnings = FALSE)
 
 out_overlap_dir <- file.path(output_base, "DEG_vs_Module_overlaps")
@@ -983,7 +1005,7 @@ wgcna_root <- "Jena_count_DEseq2_batchCorrected_nonzero_50mod_0.4thresh_robustZ_
 # Update this path if your new batch-corrected WGCNA run has a different folder name.
 stopifnot(dir.exists(wgcna_root))
 
-go_out_dir <- file.path(getwd(), "results_batch", "GO_by_module")
+go_out_dir <- file.path(base_dir, "results_batch", "GO_by_module")
 go_png_dir <- file.path(go_out_dir, "PNG")
 go_svg_dir <- file.path(go_out_dir, "SVG")
 go_png_dir_top10 <- file.path(go_out_dir, "PNG_top10")

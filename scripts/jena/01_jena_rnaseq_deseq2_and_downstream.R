@@ -1,9 +1,25 @@
+# ============================================================
+# GitHub / reproducibility notes
+# ============================================================
+# Primary RNA-seq dataset: GEO GSE334185
+#
+# Required local inputs for the downstream analysis include:
+#   Jena_collab_exps_results/txi_rawcounts.rds
+#   Jena_collab_exps_results/meta_aligned.rds
+#   Jena_collab_exps_results/salmon.merged.gene_counts.tsv
+#   CollecTRI_source.tsv
+#
+# The commented tximport block below documents how txi_rawcounts.rds
+# was generated from per-sample Salmon quant.sf files and tx2gene.tsv.
+# Statistical models, thresholds, contrasts, and plotting logic are
+# unchanged from the analysis used for the manuscript.
+# ============================================================
+
 # ----------------------------
 # Setup
 # ----------------------------
 
-# Set this to the local directory containing the Jena RNA-seq analysis files.
-# Processed sequencing data are available from GEO: GSE334185.
+# Set this to the local directory containing the Jena analysis inputs.
 base_dir <- "PATH/TO/JENA_PROJECT_DIRECTORY"
 
 if (!dir.exists(base_dir)) {
@@ -14,6 +30,8 @@ if (!dir.exists(base_dir)) {
 }
 
 setwd(base_dir)
+
+jena_results_dir <- file.path(base_dir, "Jena_collab_exps_results")
 
 # ============================================================
 # Revision analysis output locations
@@ -67,7 +85,7 @@ cat(
 
 
 
-# .libPaths(c("C:/Users/jwbre/Rlibs_clean", .libPaths()))
+# If needed, add a custom R library path here.
 library(tximport)
 library(readr)
 library(DESeq2)
@@ -82,7 +100,7 @@ library(dplyr)
 # meta <- meta %>% filter(tube_folder_label != drop_sample)
 # rownames(meta) <- meta$tube_folder_label
 
-# salmon_dir <- "E:/Jena_collab_exps/results/rnaseq_salmon_fastqc_notrim/salmon"
+# salmon_dir <- file.path(jena_results_dir, "salmon")
 # 
 # files <- file.path(salmon_dir, meta$tube_folder_label, "quant.sf")
 # names(files) <- meta$tube_folder_label
@@ -90,21 +108,21 @@ library(dplyr)
 # # verify paths
 # stopifnot(all(file.exists(files)))
 # 
-# tx2gene <- read_tsv("Jena_collab_exps_results/tx2gene.tsv",
+# tx2gene <- read_tsv(file.path(jena_results_dir, "tx2gene.tsv"),
 #                     col_names = c("TXNAME","GENEID"),
 #                     show_col_types = FALSE)
 # 
 # txi <- tximport(files, type="salmon", tx2gene=tx2gene, countsFromAbundance="no")
 # 
 # # SAVE so you don't need SSD later
-# saveRDS(txi, file = "Jena_collab_exps_results/txi_rawcounts.rds")
-# saveRDS(meta, file = "Jena_collab_exps_results/meta_aligned.rds")
+# saveRDS(txi, file = file.path(jena_results_dir, "txi_rawcounts.rds"))
+# saveRDS(meta, file = file.path(jena_results_dir, "meta_aligned.rds"))
 
 
 # important imports -------------------------------------------------------
 
-txi  <- readRDS("Jena_collab_exps_results/txi_rawcounts.rds")
-meta <- readRDS("Jena_collab_exps_results/meta_aligned.rds")
+txi  <- readRDS(file.path(jena_results_dir, "txi_rawcounts.rds"))
+meta <- readRDS(file.path(jena_results_dir, "meta_aligned.rds"))
 
 
 
@@ -116,8 +134,8 @@ meta <- readRDS("Jena_collab_exps_results/meta_aligned.rds")
 # library(DESeq2)
 # 
 # # Reload the unchanged original analysis inputs
-# txi  <- readRDS("Jena_collab_exps_results/txi_rawcounts.rds")
-# meta <- readRDS("Jena_collab_exps_results/meta_aligned.rds")
+# txi  <- readRDS(file.path(jena_results_dir, "txi_rawcounts.rds"))
+# meta <- readRDS(file.path(jena_results_dir, "meta_aligned.rds"))
 
 # ------------------------------------------------------------
 # 1) Basic input checks
@@ -252,7 +270,7 @@ print(baseline_details, row.names = FALSE)
 # ============================================================
 
 # gene_annot <- readr::read_tsv(
-#   "Jena_collab_exps_results/salmon.merged.gene_counts.tsv",
+#   file.path(jena_results_dir, "salmon.merged.gene_counts.tsv"),
 #   show_col_types = FALSE
 # ) %>%
 #   dplyr::select(gene_id, gene_name) %>%
@@ -705,7 +723,7 @@ library(readr)
 library(dplyr)
 
 gene_annot <- read_tsv(
-  "Jena_collab_exps_results/salmon.merged.gene_counts.tsv",
+  file.path(jena_results_dir, "salmon.merged.gene_counts.tsv"),
   show_col_types = FALSE
 ) %>%
   dplyr::select(gene_id, gene_name) %>%
@@ -798,7 +816,7 @@ res_baseline_shr <- lfcShrink(
 # ------------------------------------------------------------
 
 # gene_annot <- readr::read_tsv(
-#   "Jena_collab_exps_results/salmon.merged.gene_counts.tsv",
+#   file.path(jena_results_dir, "salmon.merged.gene_counts.tsv"),
 #   show_col_types = FALSE
 # ) %>%
 #   dplyr::select(gene_id, gene_name) %>%
@@ -989,7 +1007,7 @@ dir.create(deg_dir, recursive = TRUE, showWarnings = FALSE)
 
 if (!exists("gene_annot")) {
   gene_annot <- read_tsv(
-    "Jena_collab_exps_results/salmon.merged.gene_counts.tsv",
+    file.path(jena_results_dir, "salmon.merged.gene_counts.tsv"),
     show_col_types = FALSE
   ) %>%
     select(gene_id, gene_name) %>%
@@ -3629,7 +3647,7 @@ cat(
 # 
 
 #restarting after checkpoint
-# revision_dir <- "C:/Users/jwbre/Documents/Campisi/Jena_collab_exps_all fastqs/Jena_collab_revisions"
+# revision_dir <- file.path(base_dir, "Jena_collab_revisions")
 # 
 # checkpoint_file <- file.path(
 #   revision_dir,
