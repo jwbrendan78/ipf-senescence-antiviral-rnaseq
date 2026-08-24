@@ -48,3 +48,21 @@ ipf-senescence-antiviral-rnaseq/
         ├── run_nfcore_rnaseq_salmon_SS_0_240_exclude_corrupted.sh
         ├── samplesheet_SS_0_240_exclude_corrupted.csv
         └── exclude_corrupted_fastqs.txt
+
+## Analysis overview
+
+### Jena primary RNA-seq dataset
+
+The primary dataset was analyzed using:
+
+- Salmon-based RNA-seq quantification
+- DESeq2 differential expression analysis with disease, infection, senescence condition, and batch included in the model
+- PCA of variance-stabilized expression values
+- Differentially expressed gene overlap and pathway enrichment analyses
+- Batch-corrected WGCNA co-expression network analysis
+- Module enrichment and hub-gene network visualization
+- Transcription factor activity inference using CollecTRI and decoupleR
+
+### Rubedo validation dataset
+
+The independent Rubedo dataset was reanalyzed using a donor-aware mixed-model framework with `dream`, followed by preranked gene set enrichment analysis focused on antiviral and interferon-related pathways.
