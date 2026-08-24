@@ -145,6 +145,14 @@ RNA-seq quantification details, the nf-core/rnaseq command, and the analysis sam
 
 `workflow/rubedo/`
 
+## Reproducibility and repository preparation
+
+The analysis scripts in this repository reflect the code used for the reported analyses. Prior to public release, the scripts were minimally cleaned with assistance from ChatGPT to improve readability, documentation, and portability across computing environments.
+
+These repository-preparation changes included removal of machine-specific file paths, consolidation of user-configurable paths, clarification of comments, and documentation of required inputs. The underlying statistical models, analysis parameters, contrasts, thresholds, and computational methods were not intentionally altered during this cleanup.
+
+Because the original analyses were performed across specific local R, Python, Nextflow, and filesystem environments, users reproducing the analyses may need to modify project paths, reference-file locations, software environments, or other system-specific settings for their own computing setup.
+
 ## License
 
 This repository is available under the MIT License. See `LICENSE` for details.
